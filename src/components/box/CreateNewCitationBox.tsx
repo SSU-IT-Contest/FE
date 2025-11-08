@@ -23,13 +23,6 @@ import useResetOnNewWork from "@/hooks/useResetOnNewWork";
 import { useHistorySessionStore } from "@/stores/historySession.store";
 import { Sparkles } from "lucide-react";
 
-/**
- * ⛳️ 포인트
- * - 라벨+인풋, 라벨+셀렉트, 버튼을 각각 하나의 "행"으로 감싸고(data-* row) 가이드가 그 행을 하이라이트합니다.
- * - 원래 레이아웃/색상은 건드리지 않습니다. wrapper는 position만 가지는 상대 블록이라 폭/높이에 영향 없음.
- * - 개별 요소에도 data-*를 추가해둬서 필요 시 가이드에서 union 타깃을 잡을 수도 있습니다.
- */
-
 const CreateNewCitationBox = () => {
   const [urlValue, setUrlValue] = useState<string>("");
   const [selectedForm, setSelectedForm] = useState<string | undefined>(
@@ -40,12 +33,12 @@ const CreateNewCitationBox = () => {
   const isLogin = useAuthStore((s) => s.isLogin);
   const setNewCitation = useCitationStore((s) => s.setNewCitation);
   const clearHistory = useCiteHistoryStore((state) => state.clearCiteHistory);
-  const citeSessionId = useHistorySessionStore(
-    (s) => s.sessions.cite.currentSessionId
-  );
-  const canAppendHistory = useHistorySessionStore((s) => s.canAppendHistory);
-  const startNewSession = useHistorySessionStore((s) => s.startNewSession);
-  const appendOneHistory = useHistorySessionStore((s) => s.appendOneHistory);
+  // const citeSessionId = useHistorySessionStore(
+  //   (s) => s.sessions.cite.currentSessionId
+  // );
+  // const canAppendHistory = useHistorySessionStore((s) => s.canAppendHistory);
+  // const startNewSession = useHistorySessionStore((s) => s.startNewSession);
+  // const appendOneHistory = useHistorySessionStore((s) => s.appendOneHistory);
   const resetSession = useHistorySessionStore((s) => s.resetSession);
 
   const router = useRouter();
@@ -93,12 +86,16 @@ const CreateNewCitationBox = () => {
     }
     if (isSubmitDisabled || inFlightRef.current) return;
 
-    if (citeSessionId && !canAppendHistory("cite")) {
-      alert(
-        "히스토리 내용은 10개까지만 저장됩니다.\n'새 작업'을 눌러 새로운 작업을 시작해 주세요."
-      );
-      return;
-    }
+    // const hs = useHistorySessionStore.getState();
+    // const sessionIdNow = hs.sessions.cite.currentSessionId;
+    // const canAppendNow = hs.canAppendHistory("cite");
+
+    // if (sessionIdNow && !canAppendNow) {
+    //   alert(
+    //     "히스토리 내용은 10개까지만 저장됩니다.\n'새 작업'을 눌러 새로운 작업을 시작해 주세요."
+    //   );
+    //   return;
+    // }
 
     inFlightRef.current = true;
 
@@ -115,12 +112,14 @@ const CreateNewCitationBox = () => {
       setNewCitation(result);
 
       // 3) 인용문 전송
-      const response = await sendCitationAsync({
+      await sendCitationAsync({
         citeId: data.citeId,
         citation: result,
         style: selectedForm!,
+        url: urlValue,
         folderId: null,
-        historyId: citeSessionId ?? null,
+        // historyId: sessionIdNow ?? null,
+        historyId: null,
       });
 
       // ✅ GTM 이벤트
@@ -132,12 +131,12 @@ const CreateNewCitationBox = () => {
       });
 
       // 세션 관리
-      const hid = Number(response.historyId);
-      if (!citeSessionId) {
-        startNewSession("cite", hid);
-      } else {
-        appendOneHistory("cite");
-      }
+      // const hid = Number(response.historyId);
+      // if (!sessionIdNow) {
+      //   hs.startNewSession("cite", hid);
+      // } else {
+      //   hs.appendOneHistory("cite");
+      // }
 
       // 4) 사이드바 갱신
       startTransition(() => {
@@ -169,10 +168,10 @@ const CreateNewCitationBox = () => {
     sendCitationAsync,
     queryClient,
     startTransition,
-    appendOneHistory,
-    canAppendHistory,
-    citeSessionId,
-    startNewSession,
+    // appendOneHistory,
+    // canAppendHistory,
+    // citeSessionId,
+    // startNewSession,
   ]);
 
   return (

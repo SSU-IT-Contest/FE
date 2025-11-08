@@ -154,7 +154,7 @@ const ModeSelector = ({ activeMode, setActiveMode, customStyle, setCustomStyle, 
       <div className="md:hidden flex items-center gap-1 overflow-visible">
         {/* 드롭다운 */}
         <div className="relative inline-block w-max" ref={modeDropdownRef}>
-          <button onClick={() => setIsModeDropdownOpen(!isModeDropdownOpen)} className={clsx("px-3 py-1.5 rounded-lg font-semibold text-xs text-left flex justify-between items-center gap-2", "bg-purple-100 hover:bg-purple-200 text-purple-900 border border-purple-300")} style={{ minWidth: "140px" }}>
+          <button data-tour="mode-buttons" onClick={() => setIsModeDropdownOpen(!isModeDropdownOpen)} className={clsx("px-3 py-1.5 rounded-lg font-semibold text-xs text-left flex justify-between items-center gap-2", "bg-purple-100 hover:bg-purple-200 text-purple-900 border border-purple-300")} style={{ minWidth: "140px" }}>
             <span className="truncate">{activeMode}</span>
             <ChevronDown size={16} className={clsx("transition-transform flex-shrink-0", isModeDropdownOpen && "rotate-180")} />
           </button>
