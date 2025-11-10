@@ -1,45 +1,57 @@
-// 결제 관련 API 함수들
-export const updateUserPlan = async (memberId: number, planId: number, accessToken: string) => {
-  try {
-    const response = await fetch(`/api/members/${memberId}/plan`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`
-      },
-      body: JSON.stringify({ planId })
-    });
+import { api } from "@/apis/api";
+import { AxiosError } from "axios";
 
-    if (response.ok) {
-      console.log("요금제 업데이트 성공");
-      return { success: true };
-    } else {
-      const errorData = await response.json();
-      console.error("요금제 업데이트 실패:", errorData);
-      return { success: false, error: errorData.message };
-    }
+// 회원 정보 조회
+export const getMemberInfo = async (memberId: number) => {
+  try {
+    const response = await api.get(`/members/${memberId}`);
+    console.log("회원 정보 조회 성공:", response.data);
+    return { success: true, data: response.data };
   } catch (error) {
-    console.error("요금제 업데이트 중 네트워크 오류:", error);
-    return { success: false, error: "네트워크 오류가 발생했습니다." };
+    const axiosError = error as AxiosError<{ message?: string }>;
+    console.error("회원 정보 조회 실패:", axiosError.response?.data || axiosError.message);
+    return {
+      success: false,
+      error: axiosError.response?.data?.message || "회원 정보를 불러올 수 없습니다."
+    };
   }
 };
 
-// 토큰 재발급 함수 (필요시)
+// 결제 관련 API 함수들
+export const updateUserPlan = async (memberId: number, planId: number) => {
+  try {
+    const response = await api.patch(`/members/${memberId}/plan`, { planId });
+
+    console.log("요금제 업데이트 성공:", response.data);
+    return { success: true, data: response.data };
+  } catch (error) {
+    const axiosError = error as AxiosError<{ message?: string }>;
+    console.error("요금제 업데이트 실패:", axiosError.response?.data || axiosError.message);
+    return {
+      success: false,
+      error: axiosError.response?.data?.message || "네트워크 오류가 발생했습니다."
+    };
+  }
+};
+
+// 토큰 재발급 함수
 export const reissueAccessToken = async () => {
   try {
-    const response = await fetch("/api/members/reissue", {
-      method: "POST",
-      credentials: "include" // refreshToken 쿠키 포함
-    });
+    const response = await api.post(
+      "/members/reissue",
+      {},
+      {
+        withCredentials: true
+      }
+    );
 
-    if (response.ok) {
-      const data = await response.json();
-      return { success: true, data };
-    } else {
-      return { success: false, error: "토큰 재발급 실패" };
-    }
+    return { success: true, data: response.data };
   } catch (error) {
-    console.error("토큰 재발급 중 오류:", error);
-    return { success: false, error: "네트워크 오류" };
+    const axiosError = error as AxiosError<{ message?: string }>;
+    console.error("토큰 재발급 중 오류:", axiosError);
+    return {
+      success: false,
+      error: axiosError.response?.data?.message || "토큰 재발급 실패"
+    };
   }
 };
