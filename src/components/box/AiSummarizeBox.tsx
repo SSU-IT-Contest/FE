@@ -551,7 +551,7 @@ const AiSummarizeBox = () => {
     });
   };
 
-  // 🔥 이전 히스토리 보기
+  // 이전 히스토리 보기
   const handlePrevSequence = async () => {
     if (currentSequence <= 1 || !currentSummarizeHistoryId) return;
 
@@ -562,9 +562,18 @@ const AiSummarizeBox = () => {
         sequenceNumber: currentSequence - 1
       });
 
+      console.log("🔍 이전 히스토리 조회 결과:", content);
+
+      // 상태 업데이트
       setInputText(content.originalText);
       setOutputText(content.summarizedText || "");
-      setCurrentSequence(currentSequence - 1);
+      const newSequence = currentSequence - 1;
+      setCurrentSequence(newSequence);
+
+      // 전역 상태 업데이트
+      updateSummarizeWork(currentSummarizeHistoryId, newSequence);
+
+      console.log(`✅ 이전 히스토리 로드 완료: sequence=${newSequence}`);
     } catch (error) {
       console.error("이전 히스토리 조회 실패:", error);
       toast({
@@ -576,7 +585,7 @@ const AiSummarizeBox = () => {
     }
   };
 
-  // 🔥 다음 히스토리 보기
+  // 다음 히스토리 보기
   const handleNextSequence = async () => {
     if (currentSequence >= currentSummarizeSequence || !currentSummarizeHistoryId) return;
 
@@ -587,9 +596,18 @@ const AiSummarizeBox = () => {
         sequenceNumber: currentSequence + 1
       });
 
+      console.log("🔍 다음 히스토리 조회 결과:", content);
+
+      // 상태 업데이트
       setInputText(content.originalText);
       setOutputText(content.summarizedText || "");
-      setCurrentSequence(currentSequence + 1);
+      const newSequence = currentSequence + 1;
+      setCurrentSequence(newSequence);
+
+      // 전역 상태 업데이트
+      updateSummarizeWork(currentSummarizeHistoryId, newSequence);
+
+      console.log(`✅ 다음 히스토리 로드 완료: sequence=${newSequence}`);
     } catch (error) {
       console.error("다음 히스토리 조회 실패:", error);
       toast({
