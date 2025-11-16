@@ -22,6 +22,7 @@ export type HistoryName = {
 
 export type HistoryAIContent = {
   historyId: number;
+  resultHistoryId?: number;
   name: string;
   originalText: string;
   summarizedText?: string;
