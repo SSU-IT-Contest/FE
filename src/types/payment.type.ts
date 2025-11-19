@@ -69,9 +69,9 @@ export interface PaymentVerificationRequest {
 }
 
 export const PLAN_ID_MAPPING = {
-  basic: 1, // Basic 플랜 = planId 1
-  standard: 2, // Standard 플랜 = planId 2
-  pro: 3 // Pro 플랜 = planId 3
+  basic: 2,
+  standard: 3,
+  pro: 4
 } as const;
 
 export type PlanType = keyof typeof PLAN_ID_MAPPING;

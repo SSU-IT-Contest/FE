@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { FileUpload } from "@/components/FileUpload";
 import { toast } from "@/hooks/use-toast";
 import clsx from "clsx";
@@ -19,6 +19,7 @@ import useClearContent from "@/hooks/useClearContent";
 import useResetOnNewWork from "@/hooks/useResetOnNewWork";
 import { useAiHistoryStore } from "@/stores/aiHistory.store";
 import { SummarizeGuide } from "../guide/SummarizeGuide";
+import { HistoryAIContent } from "@/types/history.type";
 
 const HEADER_H = 72; // px
 
@@ -323,6 +324,7 @@ const AiSummarizeBox = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [currentSequence, setCurrentSequence] = useState(1);
+  const [isHistoryMode, setIsHistoryMode] = useState(false);
 
   // ========== Hooks ==========
   useClearContent();
@@ -351,23 +353,99 @@ const AiSummarizeBox = () => {
     setQuestionText("");
     setIsLoading(false);
     setUploadedFile(null);
+    setIsHistoryMode(false);
     clearHistory();
     resetSummarizeWork();
   });
 
+  // 모드 복원 함수
+  const restoreMode = useCallback((content: Partial<HistoryAIContent>) => {
+    if (!content.mode) {
+      console.log("⚠️ 모드 정보가 없습니다 (구버전 히스토리)");
+      return;
+    }
+
+    const modeMap: Record<string, SummarizeMode> = {
+      "one-line": "한줄 요약",
+      full: "전체 요약",
+      "by-paragraph": "문단별 요약",
+      "key-points": "핵심 요약",
+      "question-based": "질문 기반 요약",
+      targeted: "타겟 요약"
+    };
+
+    const koreanMode = modeMap[content.mode] || "한줄 요약";
+    setActiveMode(koreanMode);
+
+    console.log(`모드 복원: ${content.mode} → ${koreanMode}`);
+
+    if (content.mode === "question-based" && content.question) {
+      setQuestionText(content.question);
+      console.log(`질문 복원: "${content.question}"`);
+    } else {
+      setQuestionText("");
+    }
+
+    if (content.mode === "targeted" && content.target) {
+      setTargetAudience(content.target);
+      console.log(`타겟 복원: "${content.target}"`);
+    } else {
+      setTargetAudience("");
+    }
+  }, []);
+
   // 사이드바 히스토리 선택 시
   useEffect(() => {
     if (selectedHistory?.summarizedText) {
+      const historyId = selectedHistory.historyId || selectedHistory.resultHistoryId;
+
+      console.log("사이드바 히스토리 선택됨:", {
+        historyId,
+        sequenceNumber: selectedHistory.sequenceNumber,
+        name: selectedHistory.name
+      });
+
+      if (!historyId) {
+        console.error("historyId를 찾을 수 없습니다:", selectedHistory);
+        return;
+      }
+
+      // selectedHistory의 내용을 즉시 표시
       setOutputText(selectedHistory.summarizedText);
       setInputText(selectedHistory.originalText);
+      setCurrentSequence(selectedHistory.sequenceNumber);
 
-      // 선택된 히스토리의 정보로 업데이트
-      if (selectedHistory.historyId && selectedHistory.sequenceNumber) {
-        updateSummarizeWork(selectedHistory.historyId, selectedHistory.sequenceNumber);
-        setCurrentSequence(selectedHistory.sequenceNumber);
-      }
+      // 모드 정보 복원
+      restoreMode(selectedHistory);
+
+      // 선택된 히스토리의 전체 시퀀스 개수 확인
+      loadTotalSequenceCount(historyId, selectedHistory.sequenceNumber);
+
+      // 히스토리 모드 활성화
+      setIsHistoryMode(true);
     }
-  }, [selectedHistory, updateSummarizeWork]);
+  }, [selectedHistory, restoreMode]);
+
+  // 전체 시퀀스 개수 확인 함수
+  const loadTotalSequenceCount = async (historyId: number, clickedSequence: number) => {
+    try {
+      console.log("전체 시퀀스 조회 시작:", { historyId, clickedSequence });
+
+      const latestContent = await readLatestHistory({
+        service: "summary",
+        historyId: historyId
+      });
+
+      console.log("전체 시퀀스 개수:", latestContent.sequenceNumber);
+
+      updateSummarizeWork(historyId, latestContent.sequenceNumber);
+
+      console.log(`화살표 설정 완료: ${clickedSequence} / ${latestContent.sequenceNumber}`);
+    } catch (error) {
+      console.error("전체 시퀀스 조회 실패:", error);
+      updateSummarizeWork(historyId, clickedSequence);
+    }
+  };
 
   // 컴포넌트 마운트 시 최신 히스토리 로드
   useEffect(() => {
@@ -390,12 +468,18 @@ const AiSummarizeBox = () => {
       setOutputText(latestContent.summarizedText || "");
       setCurrentSequence(latestContent.sequenceNumber);
 
-      // sequence 동기화
+      const responseHistoryId = latestContent.resultHistoryId || latestContent.historyId || currentSummarizeHistoryId;
+
       if (latestContent.sequenceNumber !== currentSummarizeSequence) {
-        updateSummarizeWork(latestContent.historyId, latestContent.sequenceNumber);
+        updateSummarizeWork(responseHistoryId, latestContent.sequenceNumber);
       }
 
-      console.log(`✅ 최신 히스토리 로드: historyId=${latestContent.historyId}, sequence=${latestContent.sequenceNumber}`);
+      // 모드 정보 복원
+      restoreMode(latestContent);
+
+      setIsHistoryMode(true);
+
+      console.log(`최신 히스토리 로드: historyId=${responseHistoryId}, sequence=${latestContent.sequenceNumber}`);
     } catch (error) {
       console.error("히스토리 조회 실패:", error);
     }
@@ -408,6 +492,17 @@ const AiSummarizeBox = () => {
       currentSummarizeHistoryId,
       currentSummarizeSequence
     });
+
+    // 히스토리 모드 체크
+    if (isHistoryMode) {
+      toast({
+        title: "히스토리 데이터입니다",
+        description: "새로운 요약을 원하시면 내용을 수정하거나 '새 작업'을 시작해주세요.",
+        variant: "default",
+        duration: 3000
+      });
+      return;
+    }
 
     if (!isLogin) {
       alert("로그인 후에 이용해주세요.");
@@ -551,7 +646,7 @@ const AiSummarizeBox = () => {
     });
   };
 
-  // 🔥 이전 히스토리 보기
+  // 이전 히스토리 보기
   const handlePrevSequence = async () => {
     if (currentSequence <= 1 || !currentSummarizeHistoryId) return;
 
@@ -562,9 +657,19 @@ const AiSummarizeBox = () => {
         sequenceNumber: currentSequence - 1
       });
 
+      console.log("🔍 이전 히스토리 조회 결과:", content);
+
       setInputText(content.originalText);
       setOutputText(content.summarizedText || "");
-      setCurrentSequence(currentSequence - 1);
+      const newSequence = currentSequence - 1;
+      setCurrentSequence(newSequence);
+
+      // 모드 정보 복원
+      restoreMode(content);
+
+      setIsHistoryMode(true);
+
+      console.log(`✅ 이전 히스토리 로드 완료: sequence=${newSequence}`);
     } catch (error) {
       console.error("이전 히스토리 조회 실패:", error);
       toast({
@@ -575,8 +680,7 @@ const AiSummarizeBox = () => {
       });
     }
   };
-
-  // 🔥 다음 히스토리 보기
+  // 다음 히스토리 보기
   const handleNextSequence = async () => {
     if (currentSequence >= currentSummarizeSequence || !currentSummarizeHistoryId) return;
 
@@ -587,9 +691,19 @@ const AiSummarizeBox = () => {
         sequenceNumber: currentSequence + 1
       });
 
+      console.log("🔍 다음 히스토리 조회 결과:", content);
+
       setInputText(content.originalText);
       setOutputText(content.summarizedText || "");
-      setCurrentSequence(currentSequence + 1);
+      const newSequence = currentSequence + 1;
+      setCurrentSequence(newSequence);
+
+      // 모드 정보 복원
+      restoreMode(content);
+
+      setIsHistoryMode(true);
+
+      console.log(`다음 히스토리 로드 완료: sequence=${newSequence}`);
     } catch (error) {
       console.error("다음 히스토리 조회 실패:", error);
       toast({
@@ -603,7 +717,7 @@ const AiSummarizeBox = () => {
 
   // 버튼 비활성화 조건
   const cannotSummarizeMore = !canSummarizeMore();
-  const isButtonDisabled = isLoading || (!inputText.trim() && !uploadedFile) || cannotSummarizeMore;
+  const isButtonDisabled = isLoading || (!inputText.trim() && !uploadedFile) || cannotSummarizeMore || isHistoryMode;
 
   // ========== Render ==========
   return (
@@ -639,20 +753,31 @@ const AiSummarizeBox = () => {
         <ModeSelector activeMode={activeMode} setActiveMode={setActiveMode} targetAudience={targetAudience} setTargetAudience={setTargetAudience} questionText={questionText} setQuestionText={setQuestionText} />
       </div>
 
-      {/* ✅ Paraphrase와 동일한 2-패널 카드 레이아웃 */}
       <div className={clsx("flex flex-col md:flex-row", "flex-1")}>
         {/* 입력 패널 */}
         <div data-tour="input-area" className={clsx("relative w-full h-1/2 md:h-full md:w-1/2", "bg-white border shadow-lg", "rounded-t-lg md:rounded-l-lg md:rounded-tr-none md:rounded-br-none", "overflow-hidden")}>
           <div className="p-2 md:p-4 flex flex-col h-full">
-            <textarea value={inputText} onChange={(e) => setInputText(e.target.value)} placeholder={uploadedFile ? "파일이 업로드되었습니다. 파일 내용만 요약됩니다." : "내용을 입력하세요."} className="flex-1 w-full resize-none outline-none text-sm md:text-base" disabled={isLoading || !!uploadedFile} />
-
+            <textarea
+              value={inputText}
+              onChange={(e) => {
+                setInputText(e.target.value);
+                if (isHistoryMode) {
+                  setIsHistoryMode(false);
+                }
+              }}
+              placeholder={uploadedFile ? "파일이 업로드되었습니다. 파일 내용만 요약됩니다." : "내용을 입력하세요."}
+              className="flex-1 w-full resize-none outline-none text-sm md:text-base"
+              disabled={isLoading || !!uploadedFile}
+            />
             <div className="flex justify-between items-center mt-2 md:mt-4">
               <FileUpload onFileSelect={setUploadedFile} maxSizeMB={2} disabled={isLoading} />
-
-              <button onClick={handleApiCall} data-tour="convert-button" className={clsx("py-1.5 px-4 md:py-2 md:px-6 rounded-lg font-semibold text-xs md:text-base transition-all whitespace-nowrap", cannotSummarizeMore ? "bg-gray-400 cursor-not-allowed" : "bg-purple-600 hover:bg-purple-700 text-white")} disabled={isButtonDisabled} title={cannotSummarizeMore ? "이 작업에서 최대 10개까지 요약할 수 있습니다" : ""}>
-                {cannotSummarizeMore ? "요약 제한 도달" : isLoading ? "요약 중..." : "요약하기"}
+              <button onClick={handleApiCall} data-tour="convert-button" className={clsx("py-1.5 px-4 md:py-2 md:px-6 rounded-lg font-semibold text-xs md:text-base transition-all whitespace-nowrap", cannotSummarizeMore || isHistoryMode ? "bg-gray-400 cursor-not-allowed" : "bg-purple-600 hover:bg-purple-700 text-white")} disabled={isButtonDisabled} title={isHistoryMode ? "히스토리 데이터입니다. 내용을 수정하거나 새 작업을 시작하세요." : cannotSummarizeMore ? "이 작업에서 최대 10개까지 요약할 수 있습니다" : ""}>
+                {isHistoryMode ? "히스토리 보기 중" : cannotSummarizeMore ? "요약 제한 도달" : isLoading ? "요약 중..." : "요약하기"}
               </button>
             </div>
+
+            {/* 히스토리 모드 안내 */}
+            {isHistoryMode && <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-800">ℹ️ 히스토리 데이터입니다. 내용을 수정하면 새로 요약할 수 있습니다.</div>}
 
             {/* 10개 도달 경고 */}
             {cannotSummarizeMore && (
@@ -669,13 +794,12 @@ const AiSummarizeBox = () => {
         {/* 출력 패널 */}
         <div className={clsx("relative w-full h-1/2 md:h-full md:w-1/2", "bg-gray-50 border shadow-lg md:-ml-px", "rounded-b-lg md:rounded-r-lg md:rounded-tl-none md:rounded-bl-none", "overflow-hidden")}>
           <div className="p-2 md:p-4 h-full relative">
-            <div className="w-full h-full whitespace-pre-wrap text-gray-800 pr-10 text-sm md:text-base">{isLoading ? "요약 생성 중..." : selectedHistory?.summarizedText || outputText || "여기에 요약 결과가 표시됩니다."}</div>
-
-            {(selectedHistory?.summarizedText || outputText) && (
+            {/* 출력 패널 */}
+            <div className="w-full h-full whitespace-pre-wrap text-gray-800 pr-10 text-sm md:text-base">{isLoading ? "요약 생성 중..." : outputText || "여기에 요약 결과가 표시됩니다."}</div>
+            {outputText && (
               <button
                 onClick={() => {
-                  navigator.clipboard.writeText(selectedHistory?.summarizedText || outputText);
-                  // ✅ GTM 이벤트 푸시
+                  navigator.clipboard.writeText(outputText);
                   window.dataLayer = window.dataLayer || [];
                   window.dataLayer.push({
                     event: "copy_result",

@@ -22,6 +22,7 @@ export type HistoryName = {
 
 export type HistoryAIContent = {
   historyId: number;
+  resultHistoryId?: number;
   name: string;
   originalText: string;
   summarizedText?: string;
@@ -31,6 +32,8 @@ export type HistoryAIContent = {
   mode?: string; // "standard" | "academic" | "creative" | "fluency" | "experimental" | "custom"
   userRequestMode?: string; // 사용자 지정 모드일 때의 커스텀 스타일
   scale?: number; // 창의성 레벨 (0-100)
+  question?: string;
+  target?: string;
 };
 
 export type HistoryCiteContent = {
