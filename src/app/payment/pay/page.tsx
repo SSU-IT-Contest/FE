@@ -1,7 +1,8 @@
 "use client";
 
-import { Suspense, useState, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { useAuthStore } from "@/stores/auth.store";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -13,15 +14,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { ServicePlan } from "@/types/payment.type";
 import { PLAN_ID_MAPPING } from "@/types/payment.type";
 import FreeBetaButton from "@/components/payment/FreeBetaButton";
-
-interface UserInfo {
-  memberId: number;
-  accessToken: string;
-  id: string;
-  email: string;
-  role: string;
-  planId: number;
-}
 
 const SERVICE_PLANS: Record<string, ServicePlan> = {
   basic: {
@@ -82,44 +74,14 @@ const getBadgeColor = (planId: string) => {
 
 function PayPageContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
+
+  const isLogin = useAuthStore((state) => state.isLogin);
 
   const initialPlanId = searchParams.get("plan") || "standard";
   const [selectedPlanId, setSelectedPlanId] = useState(initialPlanId);
   const selectedPlan = SERVICE_PLANS[selectedPlanId];
-
   const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("yearly");
-  const [currentUser, setCurrentUser] = useState<UserInfo | null>(null);
-  const [isLoadingUser, setIsLoadingUser] = useState(true);
-
-  useEffect(() => {
-    const loadUserInfo = () => {
-      try {
-        const accessToken = localStorage.getItem("accessToken");
-        const memberId = localStorage.getItem("memberId");
-        const userEmail = localStorage.getItem("email");
-        const userId = localStorage.getItem("id");
-        const role = localStorage.getItem("role");
-        const currentPlanId = localStorage.getItem("planId");
-
-        if (accessToken && memberId) {
-          setCurrentUser({
-            memberId: parseInt(memberId),
-            accessToken,
-            id: userId || "",
-            email: userEmail || "",
-            role: role || "ROLE_USER",
-            planId: parseInt(currentPlanId || "1")
-          });
-        }
-      } catch (error) {
-        console.error("사용자 정보 로드 실패:", error);
-      } finally {
-        setIsLoadingUser(false);
-      }
-    };
-
-    loadUserInfo();
-  }, []);
 
   const calculateSavings = (plan: ServicePlan) => {
     const monthlyTotal = plan.monthlyPrice * 12;
@@ -129,24 +91,17 @@ function PayPageContent() {
     return { savings, discountPercent };
   };
 
-  if (isLoadingUser) {
-    return (
-      <div className="container mx-auto px-4 py-8 max-w-6xl">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <h2 className="text-xl font-semibold mb-2">사용자 정보 확인 중...</h2>
-          <p className="text-gray-600">잠시만 기다려주세요.</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!currentUser) {
+  if (!isLogin) {
     return (
       <div className="container mx-auto px-4 py-8 max-w-6xl">
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>로그인이 필요합니다. 로그인 후 다시 시도해주세요.</AlertDescription>
+          <AlertDescription>
+            로그인이 필요합니다.{" "}
+            <button onClick={() => router.push("/login")} className="underline font-semibold hover:text-red-800">
+              로그인하기
+            </button>
+          </AlertDescription>
         </Alert>
       </div>
     );
@@ -157,9 +112,6 @@ function PayPageContent() {
       <div className="mb-8 text-center">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Phraiz AI 구독하기</h1>
         <p className="text-gray-600">완벽한 AI 문장변환 서비스를 선택하세요</p>
-        <p className="text-sm text-gray-500 mt-2">
-          환영합니다, <span className="font-medium">{currentUser.id}</span>님!
-        </p>
       </div>
 
       {/* 요금제 비교 섹션 */}

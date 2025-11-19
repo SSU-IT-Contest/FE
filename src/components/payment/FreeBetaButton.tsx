@@ -1,3 +1,4 @@
+// src/components/payment/FreeBetaButton.tsx
 "use client";
 
 import { useState } from "react";
@@ -16,7 +17,8 @@ interface FreeBetaButtonProps {
 
 const FreeBetaButton = ({ planId, planName, billingCycle }: FreeBetaButtonProps) => {
   const router = useRouter();
-  const { accessToken, setPlanTier } = useAuthStore();
+
+  const { isLogin, accessToken, setPlanTier } = useAuthStore();
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,17 +30,33 @@ const FreeBetaButton = ({ planId, planName, billingCycle }: FreeBetaButtonProps)
       setIsProcessing(true);
       setError(null);
 
-      // 로그인 확인
-      if (!accessToken) {
+      console.log("🔍 인증 정보 확인:", {
+        isLogin,
+        accessToken: accessToken ? "있음" : "없음"
+      });
+
+      if (!isLogin || !accessToken) {
         setError("로그인이 필요합니다. 로그인 후 다시 시도해주세요.");
         setTimeout(() => router.push("/login"), 2000);
         return;
       }
 
-      // memberId 가져오기
-      const memberId = localStorage.getItem("memberId");
+      // ✅ localStorage와 sessionStorage 모두 확인
+      const memberId = localStorage.getItem("memberId") || sessionStorage.getItem("memberId");
+
+      console.log("🔍 memberId 확인:", {
+        localStorage: localStorage.getItem("memberId"),
+        sessionStorage: sessionStorage.getItem("memberId")
+      });
+
+      // ✅ memberId가 없으면 재로그인 요청
       if (!memberId) {
-        setError("회원 정보를 찾을 수 없습니다. 다시 로그인해주세요.");
+        setError("세션이 만료되었습니다. 다시 로그인해주세요.");
+        setTimeout(() => {
+          // 로그아웃 처리
+          useAuthStore.getState().logout();
+          router.push("/login");
+        }, 2000);
         return;
       }
 
@@ -63,7 +81,6 @@ const FreeBetaButton = ({ planId, planName, billingCycle }: FreeBetaButtonProps)
       const newTier = planTierMap[planId] || "Free";
       setPlanTier(newTier);
 
-      // localStorage도 업데이트 (새로고침 시 유지용)
       localStorage.setItem("planId", planId.toString());
 
       console.log("✅ 전역 상태 및 localStorage 업데이트 완료:", { planId, newTier });

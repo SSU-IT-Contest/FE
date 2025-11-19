@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import clsx from "clsx";
 import { Copy } from "lucide-react";
@@ -19,6 +19,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useAiHistoryStore } from "@/stores/aiHistory.store";
 import { ChevronDown, MessageCircle } from "lucide-react";
 import { ParaphraseGuide } from "../guide/ParaphraseGuide";
+import { HistoryAIContent } from "@/types/history.type";
 
 const HEADER_H = 72; // px
 
@@ -298,82 +299,98 @@ const AiParaphraseBox = () => {
     resetParaphraseWork();
   });
 
-  // 사이드바 히스토리 선택 시
-  useEffect(() => {
-    if (selectedHistory?.paraphrasedText) {
-      setOutputText(selectedHistory.paraphrasedText);
-      setInputText(selectedHistory.originalText);
-
-      // 모드 정보 복원
-      if (selectedHistory.mode) {
-        const modeMap: Record<string, ParaphraseMode> = {
-          standard: "표준",
-          academic: "학술적",
-          creative: "창의적",
-          fluency: "유창성",
-          experimental: "문학적",
-          custom: "사용자 지정"
-        };
-        const koreanMode = modeMap[selectedHistory.mode] || "표준";
-        setActiveMode(koreanMode);
-
-        if (selectedHistory.mode === "custom" && selectedHistory.userRequestMode) {
-          setCustomStyle(selectedHistory.userRequestMode);
-        }
-
-        if (selectedHistory.scale !== undefined) {
-          setCreativityLevel(selectedHistory.scale);
-        }
-      }
-
-      // 선택된 히스토리의 정보로 업데이트
-      if (selectedHistory.historyId && selectedHistory.sequenceNumber) {
-        updateParaphraseWork(selectedHistory.historyId, selectedHistory.sequenceNumber);
-        setCurrentSequence(selectedHistory.sequenceNumber);
-      }
-
-      // 히스토리 모드 활성화
-      setIsHistoryMode(true);
+  // 모드 복원 함수 추가
+  const restoreMode = useCallback((content: Partial<HistoryAIContent>) => {
+    if (!content.mode) {
+      console.log("모드 정보가 없습니다 (구버전 히스토리)");
+      return;
     }
-  }, [selectedHistory, updateParaphraseWork]);
 
-  // 컴포넌트 마운트 시 최신 히스토리 로드
+    const modeMap: Record<string, ParaphraseMode> = {
+      standard: "표준",
+      academic: "학술적",
+      creative: "창의적",
+      fluency: "유창성",
+      experimental: "문학적",
+      custom: "사용자 지정"
+    };
+
+    const koreanMode = modeMap[content.mode] || "표준";
+    setActiveMode(koreanMode);
+
+    console.log(`모드 복원: ${content.mode} → ${koreanMode}`);
+
+    if (content.mode === "custom" && content.userRequestMode) {
+      setCustomStyle(content.userRequestMode);
+      console.log(`사용자 지정 스타일 복원: "${content.userRequestMode}"`);
+    } else {
+      setCustomStyle("");
+    }
+
+    if (content.scale !== undefined) {
+      setCreativityLevel(content.scale);
+      console.log(`창의성 레벨 복원: ${content.scale}`);
+    }
+  }, []); // 의존성 없음 (setState 함수는 안정적)
+
   useEffect(() => {
     if (currentParaphraseHistoryId && isLogin) {
       loadLatestHistory();
     }
   }, [currentParaphraseHistoryId, isLogin]);
 
-  // 최신 히스토리 내용 불러오기
-  const loadLatestHistory = async () => {
-    if (!currentParaphraseHistoryId) return;
+  // 사이드바 히스토리 선택 시
+  useEffect(() => {
+    if (selectedHistory?.paraphrasedText) {
+      const historyId = selectedHistory.historyId || selectedHistory.resultHistoryId;
 
-    try {
-      const latestContent = await readLatestHistory({
-        service: "paraphrase",
-        historyId: currentParaphraseHistoryId
+      console.log("🎯 사이드바 히스토리 선택됨:", {
+        historyId,
+        sequenceNumber: selectedHistory.sequenceNumber,
+        name: selectedHistory.name
       });
 
-      setInputText(latestContent.originalText);
-      setOutputText(latestContent.paraphrasedText || "");
-
-      // ✅ 이 부분 추가 확인
-      setCurrentSequence(latestContent.sequenceNumber);
-
-      console.log("📊 최신 히스토리 로드:", {
-        historyId: latestContent.historyId,
-        sequenceNumber: latestContent.sequenceNumber,
-        currentParaphraseSequence
-      });
-
-      // sequence 동기화
-      if (latestContent.sequenceNumber !== currentParaphraseSequence) {
-        updateParaphraseWork(latestContent.historyId, latestContent.sequenceNumber);
+      if (!historyId) {
+        console.error("❌ historyId를 찾을 수 없습니다:", selectedHistory);
+        return;
       }
 
+      // ✅ 즉시 표시
+      setOutputText(selectedHistory.paraphrasedText);
+      setInputText(selectedHistory.originalText);
+      setCurrentSequence(selectedHistory.sequenceNumber);
+
+      // ✅ 모드 복원
+      restoreMode(selectedHistory);
+
+      // 선택된 히스토리의 전체 시퀀스 개수 확인
+      loadTotalSequenceCount(historyId, selectedHistory.sequenceNumber);
+
+      // 히스토리 모드 활성화
       setIsHistoryMode(true);
+    }
+  }, [selectedHistory, restoreMode]);
+
+  // 전체 시퀀스 개수 확인 함수
+  const loadTotalSequenceCount = async (historyId: number, clickedSequence: number) => {
+    try {
+      console.log("전체 시퀀스 조회 시작:", { historyId, clickedSequence });
+
+      // 최신 시퀀스 번호(전체 개수) 확인
+      const latestContent = await readLatestHistory({
+        service: "paraphrase",
+        historyId: historyId
+      });
+
+      console.log("전체 시퀀스 개수:", latestContent.sequenceNumber);
+
+      // 전체 시퀀스 개수 업데이트
+      updateParaphraseWork(historyId, latestContent.sequenceNumber);
+
+      console.log(`화살표 설정 완료: ${clickedSequence} / ${latestContent.sequenceNumber}`);
     } catch (error) {
-      console.error("히스토리 조회 실패:", error);
+      console.error("전체 시퀀스 조회 실패:", error);
+      updateParaphraseWork(historyId, clickedSequence);
     }
   };
 
@@ -501,7 +518,7 @@ const AiParaphraseBox = () => {
         sequenceNumber: currentSequence - 1
       });
 
-      console.log("🔍 이전 히스토리 조회 결과:", content);
+      console.log("이전 히스토리 조회 결과:", content);
 
       // 상태 업데이트
       setInputText(content.originalText);
@@ -509,8 +526,8 @@ const AiParaphraseBox = () => {
       const newSequence = currentSequence - 1;
       setCurrentSequence(newSequence);
 
-      // 전역 상태 업데이트
-      updateParaphraseWork(currentParaphraseHistoryId, newSequence);
+      // 모드 정보 복원
+      restoreMode(content);
 
       // 히스토리 모드 활성화
       setIsHistoryMode(true);
@@ -546,8 +563,8 @@ const AiParaphraseBox = () => {
       const newSequence = currentSequence + 1;
       setCurrentSequence(newSequence);
 
-      // 전역 상태 업데이트
-      updateParaphraseWork(currentParaphraseHistoryId, newSequence);
+      // 모드 정보 복원
+      restoreMode(content);
 
       // 히스토리 모드 활성화
       setIsHistoryMode(true);
@@ -561,6 +578,43 @@ const AiParaphraseBox = () => {
         variant: "destructive",
         duration: 2000
       });
+    }
+  };
+
+  // 최신 히스토리 내용 불러오기
+  const loadLatestHistory = async () => {
+    if (!currentParaphraseHistoryId) return;
+
+    try {
+      const latestContent = await readLatestHistory({
+        service: "paraphrase",
+        historyId: currentParaphraseHistoryId
+      });
+
+      setInputText(latestContent.originalText);
+      setOutputText(latestContent.paraphrasedText || "");
+      setCurrentSequence(latestContent.sequenceNumber);
+
+      // resultHistoryId 또는 historyId 사용
+      const responseHistoryId = latestContent.resultHistoryId || latestContent.historyId || currentParaphraseHistoryId;
+
+      console.log("📊 최신 히스토리 로드:", {
+        historyId: responseHistoryId,
+        sequenceNumber: latestContent.sequenceNumber,
+        currentParaphraseSequence
+      });
+
+      // sequence 동기화
+      if (latestContent.sequenceNumber !== currentParaphraseSequence) {
+        updateParaphraseWork(responseHistoryId, latestContent.sequenceNumber);
+      }
+
+      // 모드 정보 복원
+      restoreMode(latestContent);
+
+      setIsHistoryMode(true);
+    } catch (error) {
+      console.error("히스토리 조회 실패:", error);
     }
   };
 
@@ -643,12 +697,11 @@ const AiParaphraseBox = () => {
         {/* 출력 패널 : 오른쪽 카드. 경계선 이중표시 방지용 -ml-px */}
         <div className={clsx("relative w-full h-1/2 md:h-full md:w-1/2", "bg-gray-50 border shadow-lg md:-ml-px", "rounded-b-lg md:rounded-r-lg md:rounded-tl-none md:rounded-bl-none", "overflow-hidden")}>
           <div className="p-2 md:p-4 h-full relative">
-            <div className="w-full h-full whitespace-pre-wrap text-gray-800 pr-10 text-sm md:text-base">{isLoading ? "결과 생성 중..." : selectedHistory?.paraphrasedText || outputText || "여기에 변환 결과가 표시됩니다."}</div>
-
-            {(selectedHistory?.paraphrasedText || outputText) && (
+            <div className="w-full h-full whitespace-pre-wrap text-gray-800 pr-10 text-sm md:text-base">{isLoading ? "결과 생성 중..." : outputText || "여기에 변환 결과가 표시됩니다."}</div>
+            {outputText && (
               <button
                 onClick={() => {
-                  navigator.clipboard.writeText(selectedHistory?.paraphrasedText || outputText);
+                  navigator.clipboard.writeText(outputText);
                   window.dataLayer = window.dataLayer || [];
                   window.dataLayer.push({
                     event: "copy_result",
